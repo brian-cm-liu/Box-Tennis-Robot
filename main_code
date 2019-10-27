@@ -1,0 +1,98 @@
+#include <NewPing.h>
+
+//Pins
+const int sonarTrig = 11;
+const int sonarEcho = 12;
+const int MOTOR1_FORWARD = 9;
+const int MOTOR1_BACKWARD = 8;
+const int MOTOR1_ENABLE = 10;
+const int MOTOR2_FORWARD = 6;
+const int MOTOR2_BACKWARD = 7;
+const int MOTOR2_ENABLE = 5;
+
+//Creating sonar object and storing distance data
+NewPing sonarSensor(sonarTrig, sonarEcho, 200);
+int distanceToObject = 0;
+
+//Movement Motor 1 is right side, Motor 2 is left side
+//MotorL speed = MotorR speed * 1.4
+const int forwardSpeedL = 212;
+const int forwardSpeedR = 150;
+
+//Variables for controlling how fast and precisely the robot turns
+const int turnSpeedL = 212;
+const int turnSpeedR = 150;
+static float angle = 90; //0 is facing left, 180 is facing right
+const float angleChangeRate = 3.35; //How quickly the variable changes, needs to be calibrated to match how quickly the robot turns
+
+//Variables for searching
+const float searchDistance = 30;
+
+void setup() {
+  // put your setup code here, to run once:
+  Serial.begin(9600);
+  Serial.println("Start");
+  delay(1000);
+  Serial.println("3");
+  delay(1000);
+  Serial.println("2");
+  delay(1000);
+  Serial.println("1");
+  delay(1000);
+}
+
+void loop() {
+  distanceToObject = sonarSensor.ping_cm();
+  turn(0.0);
+}
+
+void forward(){
+  digitalWrite(MOTOR1_FORWARD,HIGH);
+  digitalWrite(MOTOR1_BACKWARD,LOW);
+  digitalWrite(MOTOR2_FORWARD,HIGH);
+  digitalWrite(MOTOR2_BACKWARD,LOW);
+  analogWrite(MOTOR1_ENABLE,forwardSpeedR);
+  analogWrite(MOTOR2_ENABLE,forwardSpeedL);
+}
+
+//This function turns the robot to the specified global angle, 0 is facing left and 180 is facing right. The robot will face 90, forward, by default
+void turn(float targetAngle){
+  float angleDifference = targetAngle - angle;
+  //Since we're dealing with floats, if the difference between the two is less than one, the robot stops turning
+  if(angleDifference>1){
+    Serial.println("Turning right");
+    angle += angleChangeRate;
+    digitalWrite(MOTOR1_FORWARD,LOW);
+    digitalWrite(MOTOR1_BACKWARD,HIGH);
+    digitalWrite(MOTOR2_FORWARD,HIGH);
+    digitalWrite(MOTOR2_BACKWARD,LOW);
+    analogWrite(MOTOR1_ENABLE,turnSpeedR);
+    analogWrite(MOTOR2_ENABLE,turnSpeedL);
+    angleDifference = targetAngle - angle;
+    Serial.println(angle);
+    return;
+  }
+  if(angleDifference<-1){
+    Serial.println("Turning left");
+    angle -= angleChangeRate;
+    digitalWrite(MOTOR1_FORWARD,HIGH);
+    digitalWrite(MOTOR1_BACKWARD,LOW);
+    digitalWrite(MOTOR2_FORWARD,LOW);
+    digitalWrite(MOTOR2_BACKWARD,HIGH);
+    analogWrite(MOTOR1_ENABLE,turnSpeedR);
+    analogWrite(MOTOR2_ENABLE,turnSpeedL);
+    angleDifference = targetAngle - angle;
+    Serial.println(angle);
+    return;
+  }
+  else{
+    pause();
+  }
+}
+void pause(){
+  digitalWrite(MOTOR1_FORWARD,LOW);
+  digitalWrite(MOTOR1_BACKWARD,LOW);
+  digitalWrite(MOTOR2_FORWARD,LOW);
+  digitalWrite(MOTOR2_BACKWARD,LOW);
+  delay(3000);
+}
