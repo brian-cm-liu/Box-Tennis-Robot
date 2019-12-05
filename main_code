@@ -12,16 +12,17 @@ const int MOTOR2_ENABLE = 5;
 const int IR_PIN_R = A0;
 const int IR_PIN_L = A1;
 
+//IR array
+const int IR_PIN_1 = A2;
+const int IR_PIN_3 = A3;
+const int IR_PIN_5 = A4;
+
 const int SERVO_1 = 3;
 //const int left_servo =;
 //const int right_servo =; 
 //const int up_servo = ;
 
 static int stage = 1;
-
-//ir 20 white 1020 black
-int IR_R_value = 0;
-int IR_L_value = 0;
 
 
 //Creating sonar object and storing distance data
@@ -30,33 +31,39 @@ int distanceToObject = 0;
 
 //Movement Motor 1 is right side, Motor 2 is left side
 //MotorL speed = MotorR speed * 1.4
-const int forwardSpeedL = 200;
-const int forwardSpeedR = 142;
+const int forwardSpeedL = 175;
+const int forwardSpeedR = 125;
+float forwardIncrement = 0;
 
 //Variables for controlling how fast and precisely the robot turns
-const int turnSpeedL = 200;
-const int turnSpeedR = 142;
-static float angle = 90; //0 is facing left, 180 is facing right
-const float angleChangeRate = 0.85; //How quickly the variable changes, needs to be calibrated to match how quickly the robot turns
-const float forwardChangeRate = 1;
+const int turnSpeedL = 175;
+const int turnSpeedR = 125;
+int leftIncrement = 0;
+int rightIncrement = 0;
 
 //Variables for searching
 const float searchDistance = 50;
-const float pickupDistance = 5;
+const float pickupDistance = 10;
+const float candleThreshold = 850;
+
+/**
+
+/**
+ * 1000 is about 180
+ */
+
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
   pinMode(IR_PIN_R,INPUT);
   pinMode(IR_PIN_L,INPUT);
+
+  pinMode(IR_PIN_1,INPUT);
+  pinMode(IR_PIN_3,INPUT);
+  pinMode(IR_PIN_5,INPUT);
   delay(1000);
-  //left_servo.attach(left_servo)
-  //right_servo.attach(right_servo)
-  //up_servo.attach(up_servo)
-  //left_servo.write(0)
-  //right_servo.write(0)
-  //up_servo.write(0)
-  //test();
+
 }
 
 void loop() {
@@ -64,32 +71,58 @@ void loop() {
   //Serial.println(distanceToObject);
   int irRight = analogRead(IR_PIN_R);
   int irLeft = analogRead(IR_PIN_L);
+
+  int lightLeft = analogRead(IR_PIN_5);
+  int lightMiddle = analogRead(IR_PIN_3);
+  int lightRight = analogRead(IR_PIN_1);
   /*
-  if(stage == 0)
-  {
-    //move servo down
-  }
+  Serial.print("Right: ");
+  Serial.print(irRight);
+  Serial.print(" Left: ");
+  Serial.println(irLeft);
   */
+
+
+  Serial.print("left: ");
+  Serial.print(lightLeft);
+  Serial.print("| middle: ");
+  Serial.print(lightMiddle);
+  Serial.print("| right: ");
+  Serial.println(lightRight);
+  
+
+  
+
+  //Turning left
   if(stage == 1)
   {
     turn(-1);
-    if(irLeft>500)
+    
+    if(distanceToObject<searchDistance && distanceToObject > 10)
+    {
+      Serial.print("Object found: ");
+      Serial.println(distanceToObject);
+      stage = 3;
+    }
+    if(irLeft>880)
     {
       Serial.println("Line detected");
       stage = 2;
       halt();
     }
   }
+
+  //Scanning while turning right
   if(stage == 2)
   {
     turn(1);
-    if(distanceToObject<searchDistance && distanceToObject != 0)
+    //Move to 3 if object found
+    if(distanceToObject<searchDistance && distanceToObject > 10)
     {
       Serial.println("Object found");
-      delay(20);
       stage = 3;
-      halt();
     }
+    //Return to 1 if line detected
     if(irRight>500)
     {
       Serial.println("Line detected");
@@ -97,22 +130,42 @@ void loop() {
       halt();
     }
   }
+
+  //Moving forward to the block
   if(stage == 3)
   {
-    Serial.println(distanceToObject);
-    if(distanceToObject>5)
+    forward();
+    if(distanceToObject<pickupDistance)
     {
-      forward();
-    }
-    else{
-      stage == 4;
+      stage = 4;
     }
   }
+
   if(stage == 4)
   {
-    Serial.println("Stage 4");
-    halt();
+    turn(1);
+    if(lightMiddle>lightLeft && lightMiddle> lightRight && lightMiddle>500)
+    {
+      Serial.println("Candle in front");
+      stage = 5;
+    }
   }
+  if(stage == 5)
+  {
+    forward();
+    if(lightMiddle>candleThreshold){
+      stage = 6;
+    }
+  }
+
+  //Stopping
+  if(stage == 6)
+  {
+    backward();
+    delay(1000);
+    stage = 1;
+  }
+  
 }
 //Move forward an arbitrary distance
 void forward(){
@@ -123,41 +176,20 @@ void forward(){
   analogWrite(MOTOR1_ENABLE,forwardSpeedR);
   analogWrite(MOTOR2_ENABLE,forwardSpeedL);
 }
-
-/* //Move forward or backward a defined distance
- * void move(float dist){
-  while (dist > 1) { 
-    digitalWrite(MOTOR1_FORWARD,HIGH);
-    digitalWrite(MOTOR1_BACKWARD,LOW);
-    digitalWrite(MOTOR2_FORWARD,HIGH);
-    digitalWrite(MOTOR2_BACKWARD,LOW);
-    analogWrite(MOTOR1_ENABLE,speedR);
-    analogWrite(MOTOR2_ENABLE,speedL);
-    x += forwardChangeRate* sin(angle);
-    y += forwardChangeRate *cos(angle);
-    dist -= forwardChangeRate;
-  }
-  while (dist < 1) { 
-    digitalWrite(MOTOR1_FORWARD,LOW);
-    digitalWrite(MOTOR1_BACKWARD,HIGH);
-    digitalWrite(MOTOR2_FORWARD,LOW);
-    digitalWrite(MOTOR2_BACKWARD,HIGH);
-    analogWrite(MOTOR1_ENABLE,speedR);
-    analogWrite(MOTOR2_ENABLE,speedL);
-    x -= forwardChangeRate * sin(angle);
-    y -= forwardChangeRate *cos(angle);
-    dist += forwardChangeRate;
-  }
+//Move backward an arbitrary distance
+void backward()
+{
+  digitalWrite(MOTOR1_FORWARD,LOW);
+  digitalWrite(MOTOR1_BACKWARD,HIGH);
+  digitalWrite(MOTOR2_FORWARD,LOW);
+  digitalWrite(MOTOR2_BACKWARD,HIGH);
+  analogWrite(MOTOR1_ENABLE,forwardSpeedR);
+  analogWrite(MOTOR2_ENABLE,forwardSpeedL);
 }
- * 
- */
 
-//This function turns the robot to the specified global angle, 0 is facing left and 180 is facing right. The robot will face 90, forward, by default
-void turn(float targetAngle){
-  //float angleDifference = targetAngle - angle;
-  //Since we're dealing with floats, if the difference between the two is less than one, the robot stops turning
-  if(targetAngle == 1){
-    angle += angleChangeRate;
+//This function turns the robot in the specified direction, 1 is right, -1 is left
+void turn(float turnAngle){
+  if(turnAngle == 1){
     digitalWrite(MOTOR1_FORWARD,LOW);
     digitalWrite(MOTOR1_BACKWARD,HIGH);
     digitalWrite(MOTOR2_FORWARD,HIGH);
@@ -166,8 +198,7 @@ void turn(float targetAngle){
     analogWrite(MOTOR2_ENABLE,turnSpeedL);
     return;
   }
-  if(targetAngle == -1){
-    angle -= angleChangeRate;
+  if(turnAngle == -1){
     digitalWrite(MOTOR1_FORWARD,HIGH);
     digitalWrite(MOTOR1_BACKWARD,LOW);
     digitalWrite(MOTOR2_FORWARD,LOW);
@@ -175,9 +206,6 @@ void turn(float targetAngle){
     analogWrite(MOTOR1_ENABLE,turnSpeedR);
     analogWrite(MOTOR2_ENABLE,turnSpeedL);
     return;
-  }
-  else{
-    halt();
   }
 }
 void halt(){
@@ -189,38 +217,3 @@ void halt(){
   analogWrite(MOTOR2_ENABLE,0);
   delay(500);
 }
-
-/*
-void pickup(){
- // up_servo.write(180);
-  //delay (1000);
-  //left_servo.write(180);
-  //right_servo.write(180) ;
-  //up_servo.write(0) ;
-}
-
-void drop(){
-  //up_servo.write();
-  //left_servo.write();
-  //right_servo.write();
-}
-
-void test(){
-  forward(10);
-  turn(90);
-  forward(-10);
-  turn(180);
-}
- // turn(0)
-  //while distanceToObject > 30{
-    // turn(angle+5);
-     //delay(1000);
-  //forward(distanceToObject - //experimental distancee
-  //pickup();
-  //turn(0);
-  //forward(middleY - y);
-  //turn(90);
-  //forward(//barrier x);
-  //drop();
-  //forward(-91.4);
-*/
